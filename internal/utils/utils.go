@@ -269,3 +269,15 @@ func ChangeDirectory(path string) error {
 
 	return nil
 }
+
+func OpenCursor(path string, logger func(format string, args ...interface{})) error {
+	logger("Opening cursor ...")
+	workspaceFile := "workspace.code-workspace"
+	_, err := os.Stat(filepath.Join(path, workspaceFile))
+	if !os.IsNotExist(err) {
+		path = filepath.Join(path, workspaceFile)
+	}
+
+	cmd := exec.Command("cursor", path)
+	return cmd.Start()
+}

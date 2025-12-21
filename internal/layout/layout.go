@@ -120,6 +120,10 @@ func (l *Layout) SetRoot() error {
 	return nil
 }
 
+func (l *Layout) dismissModal() {
+	l.App.SetRoot(l.Layout, true)
+}
+
 func (l *Layout) Log(format string, args ...interface{}) {
 	l.LogText.SetText(fmt.Sprintln(l.LogText.GetText(false), '\n', fmt.Sprintf(format, args...)))
 }
@@ -188,6 +192,18 @@ func (l *Layout) setupActions(path string) {
 	}
 }
 
+func (l *Layout) setupActionsAndSelect(path string, branchName string) {
+	l.setupActions(path)
+	for i := 0; i < l.ActionList.GetItemCount(); i++ {
+		mainText, _ := l.ActionList.GetItemText(i)
+		if mainText == branchName {
+			l.ActionList.SetCurrentItem(i)
+			break
+		}
+	}
+	l.App.SetFocus(l.ActionList)
+}
+
 func (l *Layout) selectedWorktreeActionList(path string, selectedWorktree string) {
 	l.ActionList.Clear()
 	l.ActionList.SetTitle("Actions for " + path)
@@ -202,9 +218,15 @@ func (l *Layout) selectedWorktreeActionList(path string, selectedWorktree string
 		l.App.SetFocus(l.ActionList)
 	}).SetSelectedBackgroundColor(secondaryColor)
 
-	l.ActionList.AddItem("Open VSCode", "", 0, func() {
-		if err := utils.OpenVSCode(".", l.Log); err != nil {
-			l.Log("Failed to open vscode: %v", err)
+	// l.ActionList.AddItem("Open VSCode", "", 0, func() {
+	// 	if err := utils.OpenVSCode(".", l.Log); err != nil {
+	// 		l.Log("Failed to open vscode: %v", err)
+	// 	}
+	// }).SetSelectedBackgroundColor(secondaryColor)
+
+	l.ActionList.AddItem("Open Cursor", "", 0, func() {
+		if err := utils.OpenCursor(".", l.Log); err != nil {
+			l.Log("Failed to open cursor: %v", err)
 		}
 	}).SetSelectedBackgroundColor(secondaryColor)
 
@@ -239,17 +261,18 @@ func (l *Layout) showWorktreeModal(path string) {
 				return
 			}
 
-			l.selectedWorktreeActionList(filepath.Join(path, newBranchName), newBranchName)
-			_ = l.SetRoot()
+			l.Log("Added worktree %v", newBranchName)
+			l.dismissModal()
+			l.setupActionsAndSelect(path, newBranchName)
 		}).
 		AddButton("To Cancel Press Esc", func() {
 			l.Log("Canceling adding new worktree")
-			_ = l.SetRoot()
+			l.dismissModal()
 		}).
 		SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 			if event.Key() == tcell.KeyEscape {
 				l.Log("Canceling adding new worktree")
-				_ = l.SetRoot()
+				l.dismissModal()
 			}
 
 			if event.Key() == tcell.KeyDown {

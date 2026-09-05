@@ -120,8 +120,18 @@ func (l *Layout) SetRoot() error {
 	return nil
 }
 
-func (l *Layout) dismissModal() {
+// restoreLayout puts the main layout back as the root. Note that this focuses
+// the repository list, whose focus handler clears the action list, so callers
+// have to rebuild the action list afterwards.
+func (l *Layout) restoreLayout() {
 	l.App.SetRoot(l.Layout, true)
+}
+
+// dismissModal closes the modal and brings the user back to the action list of
+// the repository it was opened from, ready to try again.
+func (l *Layout) dismissModal(path string) {
+	l.restoreLayout()
+	l.setupActions(path)
 	l.App.SetFocus(l.ActionList)
 }
 
@@ -276,17 +286,17 @@ func (l *Layout) showWorktreeModal(path string) {
 			}
 
 			l.Log("Added worktree %v", newBranchName)
-			l.dismissModal()
+			l.restoreLayout()
 			l.setupActionsAndSelect(path, newBranchName)
 		}).
 		AddButton("To Cancel Press Esc", func() {
 			l.Log("Canceling adding new worktree")
-			l.dismissModal()
+			l.dismissModal(path)
 		}).
 		SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 			if event.Key() == tcell.KeyEscape {
 				l.Log("Canceling adding new worktree")
-				l.dismissModal()
+				l.dismissModal(path)
 			}
 
 			if event.Key() == tcell.KeyDown {

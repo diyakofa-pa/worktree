@@ -11,7 +11,7 @@ import (
 // name typed before cancelling must not be there anymore and the form items
 // must not pile up on every open.
 func TestShowWorktreeModalStartsFresh(t *testing.T) {
-	repoPath := keepWorkingDirectory(t)
+	repoPath := tempWorkingDirectory(t)
 
 	l := NewLayout(tview.NewApplication(), repoPath)
 
@@ -45,7 +45,7 @@ func TestShowWorktreeModalStartsFresh(t *testing.T) {
 // main layout back focuses the repository list, whose focus handler clears the
 // action list, so it has to be rebuilt before it is focused again.
 func TestDismissModalLeavesUsableActionList(t *testing.T) {
-	repoPath := keepWorkingDirectory(t)
+	repoPath := tempWorkingDirectory(t)
 
 	l := NewLayout(tview.NewApplication(), repoPath)
 	l.showWorktreeModal(repoPath)
@@ -61,10 +61,10 @@ func TestDismissModalLeavesUsableActionList(t *testing.T) {
 	}
 }
 
-// keepWorkingDirectory returns a temporary directory to work in and restores
+// tempWorkingDirectory returns a temporary directory to work in and restores
 // the working directory after the test, since the application navigates the
 // file system with os.Chdir.
-func keepWorkingDirectory(t *testing.T) string {
+func tempWorkingDirectory(t *testing.T) string {
 	t.Helper()
 
 	cwd, err := os.Getwd()

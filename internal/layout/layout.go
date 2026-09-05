@@ -211,21 +211,32 @@ func (l *Layout) selectedWorktreeActionList(path string, selectedWorktree string
 	if err := utils.ChangeDirectory(path); err != nil {
 		l.Log("Failed to change directory to %v: %v", path, err)
 	}
-	l.Log("Changed directory to %v", utils.Pwd())
+	worktreeDir := utils.Pwd()
+	l.Log("Changed directory to %v", worktreeDir)
 
 	l.ActionList.AddItem(" ..", "", 0, func() {
 		l.Log("Back to Action List")
 		l.App.SetFocus(l.ActionList)
 	}).SetSelectedBackgroundColor(secondaryColor)
 
-	// l.ActionList.AddItem("Open VSCode", "", 0, func() {
-	// 	if err := utils.OpenVSCode(".", l.Log); err != nil {
-	// 		l.Log("Failed to open vscode: %v", err)
-	// 	}
-	// }).SetSelectedBackgroundColor(secondaryColor)
+	l.ActionList.AddItem("Open Bash", "", 0, func() {
+		// The shell needs the terminal, so the UI is suspended while it runs
+		// and restored once the shell exits.
+		l.App.Suspend(func() {
+			if err := utils.OpenShell(worktreeDir, l.Log); err != nil {
+				l.Log("Failed to open bash: %v", err)
+			}
+		})
+	}).SetSelectedBackgroundColor(secondaryColor)
+
+	l.ActionList.AddItem("Open VS Code", "", 0, func() {
+		if err := utils.OpenVSCode(worktreeDir, l.Log); err != nil {
+			l.Log("Failed to open vscode: %v", err)
+		}
+	}).SetSelectedBackgroundColor(secondaryColor)
 
 	l.ActionList.AddItem("Open Cursor", "", 0, func() {
-		if err := utils.OpenCursor(".", l.Log); err != nil {
+		if err := utils.OpenCursor(worktreeDir, l.Log); err != nil {
 			l.Log("Failed to open cursor: %v", err)
 		}
 	}).SetSelectedBackgroundColor(secondaryColor)

@@ -270,6 +270,45 @@ func ChangeDirectory(path string) error {
 	return nil
 }
 
+// OpenShell starts an interactive shell inside the given directory and blocks
+// until it exits, so the user can run any command (git, build tools, an AI
+// assistant, ...) from the worktree they selected. The application has to be
+// suspended by the caller first, since the shell takes over the terminal.
+func OpenShell(path string, logger func(format string, args ...interface{})) error {
+	shell := shellCommand()
+
+	logger("Opening %v in %v ...", filepath.Base(shell), path)
+	fmt.Printf("\nStarting %s in %s\nType 'exit' to go back to worktree.\n\n", shell, path)
+
+	cmd := exec.Command(shell)
+	cmd.Dir = path
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to run %v: %w", shell, err)
+	}
+
+	return nil
+}
+
+// shellCommand prefers bash and falls back to the user's login shell, then to
+// sh, so a shell is always available.
+func shellCommand() string {
+	candidates := []string{"bash", os.Getenv("SHELL"), "sh"}
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		if path, err := exec.LookPath(candidate); err == nil {
+			return path
+		}
+	}
+
+	return "sh"
+}
+
 func OpenCursor(path string, logger func(format string, args ...interface{})) error {
 	logger("Opening cursor ...")
 	workspaceFile := "workspace.code-workspace"

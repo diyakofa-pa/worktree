@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -114,8 +115,23 @@ func OpenVSCode(openingDir string, logger func(format string, args ...interface{
 	}
 
 	logger("Opening vscode ...")
-	cmd := exec.Command("code", openingDir)
-	return cmd.Start()
+
+	return startDetached(exec.Command("code", openingDir))
+}
+
+// startDetached starts a GUI application without blocking the UI and reaps it
+// in the background. Without the Wait the finished process would stay around
+// as a zombie for the whole lifetime of the application, once per launch.
+func startDetached(cmd *exec.Cmd) error {
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	go func() {
+		_ = cmd.Wait()
+	}()
+
+	return nil
 }
 
 func GetWorktrees(logger func(format string, args ...interface{})) ([]string, error) {
@@ -286,7 +302,10 @@ func OpenShell(path string, logger func(format string, args ...interface{})) err
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
+	// A non-zero status only reflects the last command the user ran in the
+	// shell, so it is not a failure of this action.
+	var exitErr *exec.ExitError
+	if err := cmd.Run(); err != nil && !errors.As(err, &exitErr) {
 		return fmt.Errorf("failed to run %v: %w", shell, err)
 	}
 
@@ -317,6 +336,5 @@ func OpenCursor(path string, logger func(format string, args ...interface{})) er
 		path = filepath.Join(path, workspaceFile)
 	}
 
-	cmd := exec.Command("cursor", path)
-	return cmd.Start()
+	return startDetached(exec.Command("cursor", path))
 }

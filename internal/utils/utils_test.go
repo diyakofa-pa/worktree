@@ -34,3 +34,13 @@ func TestShellCommandIsExecutable(t *testing.T) {
 		t.Errorf("shellCommand() = %q, want an absolute path", shell)
 	}
 }
+
+func TestStartDetached(t *testing.T) {
+	if err := startDetached(exec.Command("sh", "-c", "exit 0")); err != nil {
+		t.Errorf("startDetached() = %v, want nil", err)
+	}
+
+	if err := startDetached(exec.Command("worktree-no-such-binary")); err == nil {
+		t.Error("startDetached() = nil, want an error for a missing binary")
+	}
+}

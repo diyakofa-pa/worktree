@@ -122,6 +122,7 @@ func (l *Layout) SetRoot() error {
 
 func (l *Layout) dismissModal() {
 	l.App.SetRoot(l.Layout, true)
+	l.App.SetFocus(l.ActionList)
 }
 
 func (l *Layout) Log(format string, args ...interface{}) {
@@ -239,7 +240,20 @@ func (l *Layout) selectedWorktreeActionList(path string, selectedWorktree string
 	}).SetSelectedBackgroundColor(secondaryColor)
 }
 
+// resetWorktreeModal clears every form item and button of the "Add New
+// Worktree" modal so it always opens with an empty branch name and a single
+// set of buttons, no matter how it was dismissed before.
+func (l *Layout) resetWorktreeModal() {
+	l.WorktreeModal.Clear(true)
+	l.WorktreeModal.SetInputCapture(nil)
+}
+
 func (l *Layout) showWorktreeModal(path string) {
+	// The modal is a long lived form, so it has to be reset on every open.
+	// Otherwise the previously typed branch name (and a duplicated set of
+	// form items) is still there the next time the modal is shown.
+	l.resetWorktreeModal()
+
 	l.WorktreeModal.
 		AddInputField("Enter Branch Name", "", 30, func(text string, lastChar rune) bool {
 			if strings.Contains(text, " ") {
@@ -291,6 +305,9 @@ func (l *Layout) showWorktreeModal(path string) {
 				AddItem(nil, 0, 1, false), 0, 2, true).
 			AddItem(nil, 0, 1, false)
 	}
+
+	// Always start on the (now empty) branch name input field.
+	l.WorktreeModal.SetFocus(0)
 
 	// Set the overlay as the root and focus on the modal
 	l.App.SetRoot(modalOverlay(), true).SetFocus(l.WorktreeModal)

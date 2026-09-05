@@ -245,12 +245,16 @@ func (l *Layout) selectedWorktreeActionList(path string, selectedWorktree string
 
 	l.ActionList.AddItem("Open Bash", "", 0, func() {
 		// The shell needs the terminal, so the UI is suspended while it runs
-		// and restored once the shell exits.
-		l.App.Suspend(func() {
+		// and restored once the shell exits. Suspend reports false when it
+		// could not hand the terminal over, in which case the shell never ran.
+		suspended := l.App.Suspend(func() {
 			if err := utils.OpenShell(worktreeDir, l.Log); err != nil {
 				l.Log("Failed to open bash: %v", err)
 			}
 		})
+		if !suspended {
+			l.Log("Failed to suspend the UI, bash was not started")
+		}
 	}).SetSelectedBackgroundColor(secondaryColor)
 
 	l.ActionList.AddItem("Open VS Code", "", 0, func() {

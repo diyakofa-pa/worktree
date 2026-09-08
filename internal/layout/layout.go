@@ -120,8 +120,19 @@ func (l *Layout) SetRoot() error {
 	return nil
 }
 
-func (l *Layout) dismissModal() {
+// restoreLayout puts the main layout back as the root. Note that this focuses
+// the repository list, whose focus handler clears the action list, so callers
+// have to rebuild the action list afterwards.
+func (l *Layout) restoreLayout() {
 	l.App.SetRoot(l.Layout, true)
+}
+
+// dismissModal closes the modal and brings the user back to the action list of
+// the repository it was opened from, ready to try again.
+func (l *Layout) dismissModal(path string) {
+	l.restoreLayout()
+	l.setupActions(path)
+	l.App.SetFocus(l.ActionList)
 }
 
 func (l *Layout) Log(format string, args ...interface{}) {
@@ -239,7 +250,20 @@ func (l *Layout) selectedWorktreeActionList(path string, selectedWorktree string
 	}).SetSelectedBackgroundColor(secondaryColor)
 }
 
+// resetWorktreeModal clears every form item and button of the "Add New
+// Worktree" modal so it always opens with an empty branch name and a single
+// set of buttons, no matter how it was dismissed before.
+func (l *Layout) resetWorktreeModal() {
+	l.WorktreeModal.Clear(true)
+	l.WorktreeModal.SetInputCapture(nil)
+}
+
 func (l *Layout) showWorktreeModal(path string) {
+	// The modal is a long lived form, so it has to be reset on every open.
+	// Otherwise the previously typed branch name (and a duplicated set of
+	// form items) is still there the next time the modal is shown.
+	l.resetWorktreeModal()
+
 	l.WorktreeModal.
 		AddInputField("Enter Branch Name", "", 30, func(text string, lastChar rune) bool {
 			if strings.Contains(text, " ") {
@@ -262,17 +286,17 @@ func (l *Layout) showWorktreeModal(path string) {
 			}
 
 			l.Log("Added worktree %v", newBranchName)
-			l.dismissModal()
+			l.restoreLayout()
 			l.setupActionsAndSelect(path, newBranchName)
 		}).
 		AddButton("To Cancel Press Esc", func() {
 			l.Log("Canceling adding new worktree")
-			l.dismissModal()
+			l.dismissModal(path)
 		}).
 		SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 			if event.Key() == tcell.KeyEscape {
 				l.Log("Canceling adding new worktree")
-				l.dismissModal()
+				l.dismissModal(path)
 			}
 
 			if event.Key() == tcell.KeyDown {
@@ -291,6 +315,9 @@ func (l *Layout) showWorktreeModal(path string) {
 				AddItem(nil, 0, 1, false), 0, 2, true).
 			AddItem(nil, 0, 1, false)
 	}
+
+	// Always start on the (now empty) branch name input field.
+	l.WorktreeModal.SetFocus(0)
 
 	// Set the overlay as the root and focus on the modal
 	l.App.SetRoot(modalOverlay(), true).SetFocus(l.WorktreeModal)

@@ -1,47 +1,32 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"os"
+
+	"worktree/internal/cmd"
 	"worktree/internal/layout"
 
 	"github.com/rivo/tview"
-	"github.com/urfave/cli"
 )
 
-var (
-	entryPoint string
-)
+// version is reported by "worktree --version".
+const version = "0.2.0"
 
 func main() {
-	app := &cli.App{
-		Name:   "worktree cli",
-		Action: cmd,
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:        "entry-point",
-				EnvVar:      "WT_ENTRY_POINT",
-				Value:       ".",
-				Usage:       "Directory that has all the repositories",
-				Destination: &entryPoint,
-			},
-		},
-	}
+	app := cmd.New(version, runUI)
 
 	if err := app.Run(os.Args); err != nil {
-		log.Fatalf("Failed to run app: %v", err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 }
 
-func cmd(c *cli.Context) error {
-	app := tview.NewApplication()
+// runUI opens the interactive terminal UI over an entry point, which is what
+// the bare "worktree" command still does.
+func runUI(entryPoint string) error {
+	l := layout.NewLayout(tview.NewApplication(), entryPoint)
+	l.SetupLayoutContentMenus(entryPoint)
 
-	layout := layout.NewLayout(app, entryPoint)
-	layout.SetupLayoutContentMenus(entryPoint)
-
-	if err := layout.SetRoot(); err != nil {
-		layout.Log("Failed to run app: %v", err)
-	}
-
-	return nil
+	return l.SetRoot()
 }

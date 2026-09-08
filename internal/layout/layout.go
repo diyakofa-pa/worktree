@@ -192,51 +192,90 @@ func (l *Layout) setupActions(path string) {
 		l.ActionList.AddItem("", " ", 0, nil)
 		for _, worktreeBranch := range worktreeBranches {
 			l.ActionList.AddItem(worktreeBranch, "", 0, func() {
-				l.selectedWorktreeActionList(filepath.Join(path, worktreeBranch), worktreeBranch)
-			}).SetSelectedBackgroundColor(secondaryColor).SetBlurFunc(func() {
-				l.ActionList.Clear()
-				l.setupActions(path)
-			})
+				l.selectedWorktreeActionList(filepath.Join(path, worktreeBranch), worktreeBranch, path)
+			}).SetSelectedBackgroundColor(secondaryColor)
 		}
 	} else {
 		l.ActionList.AddItem("No worktrees found, add a new worktree!", "", 0, nil).SetSelectedBackgroundColor(secondaryColor)
 	}
 }
 
+// setupActionsAndSelect rebuilds the action list of the repository and then
+// opens the given worktree, so a freshly created worktree is the one the user
+// is already in: the repository stays selected on the left panel and its new
+// worktree is the active view on the right panel.
 func (l *Layout) setupActionsAndSelect(path string, branchName string) {
+	l.selectRepository(filepath.Base(path))
 	l.setupActions(path)
+
 	for i := 0; i < l.ActionList.GetItemCount(); i++ {
 		mainText, _ := l.ActionList.GetItemText(i)
 		if mainText == branchName {
-			l.ActionList.SetCurrentItem(i)
+			l.selectedWorktreeActionList(filepath.Join(path, branchName), branchName, path)
 			break
 		}
 	}
+
 	l.App.SetFocus(l.ActionList)
 }
 
-func (l *Layout) selectedWorktreeActionList(path string, selectedWorktree string) {
+// selectRepository moves the highlight of the repository list onto repoName
+// without changing the focus, so the left panel keeps pointing at the
+// repository the current worktree belongs to.
+func (l *Layout) selectRepository(repoName string) {
+	for i := 0; i < l.LeftList.GetItemCount(); i++ {
+		mainText, _ := l.LeftList.GetItemText(i)
+		if mainText == repoName {
+			l.LeftList.SetCurrentItem(i)
+			return
+		}
+	}
+}
+
+func (l *Layout) selectedWorktreeActionList(path string, selectedWorktree string, repoPath string) {
 	l.ActionList.Clear()
 	l.ActionList.SetTitle("Actions for " + path)
 
+	// The actions below are bound to the resolved worktree directory. When the
+	// chdir fails, utils.Pwd() would still return the previous directory and
+	// the editors would silently open the wrong one, so fall back to the path
+	// that was asked for.
+	worktreeDir := path
 	if err := utils.ChangeDirectory(path); err != nil {
 		l.Log("Failed to change directory to %v: %v", path, err)
+	} else {
+		worktreeDir = utils.Pwd()
 	}
-	l.Log("Changed directory to %v", utils.Pwd())
+	l.Log("Changed directory to %v", worktreeDir)
 
 	l.ActionList.AddItem(" ..", "", 0, func() {
 		l.Log("Back to Action List")
+		l.setupActions(repoPath)
 		l.App.SetFocus(l.ActionList)
 	}).SetSelectedBackgroundColor(secondaryColor)
 
-	// l.ActionList.AddItem("Open VSCode", "", 0, func() {
-	// 	if err := utils.OpenVSCode(".", l.Log); err != nil {
-	// 		l.Log("Failed to open vscode: %v", err)
-	// 	}
-	// }).SetSelectedBackgroundColor(secondaryColor)
+	l.ActionList.AddItem("Open Bash", "", 0, func() {
+		// The shell needs the terminal, so the UI is suspended while it runs
+		// and restored once the shell exits. Suspend reports false when it
+		// could not hand the terminal over, in which case the shell never ran.
+		suspended := l.App.Suspend(func() {
+			if err := utils.OpenShell(worktreeDir, l.Log); err != nil {
+				l.Log("Failed to open bash: %v", err)
+			}
+		})
+		if !suspended {
+			l.Log("Failed to suspend the UI, bash was not started")
+		}
+	}).SetSelectedBackgroundColor(secondaryColor)
+
+	l.ActionList.AddItem("Open VS Code", "", 0, func() {
+		if err := utils.OpenVSCode(worktreeDir, l.Log); err != nil {
+			l.Log("Failed to open vscode: %v", err)
+		}
+	}).SetSelectedBackgroundColor(secondaryColor)
 
 	l.ActionList.AddItem("Open Cursor", "", 0, func() {
-		if err := utils.OpenCursor(".", l.Log); err != nil {
+		if err := utils.OpenCursor(worktreeDir, l.Log); err != nil {
 			l.Log("Failed to open cursor: %v", err)
 		}
 	}).SetSelectedBackgroundColor(secondaryColor)

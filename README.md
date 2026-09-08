@@ -23,17 +23,22 @@ A terminal UI application for managing multiple Git repositories using Git's nat
 └─────────────────────────┘└──────────────────────────────────┘
 ```
 
-**Worktree Actions** - Select a worktree to see available IDEs:
+**Worktree Actions** - Select a worktree to open a shell or an IDE in it:
 ```
 ┌─Actions for feature/login────────────────┐
 │                                          │
 │  ..                                      │
-│  Open Cursor                             │
+│  Open Bash                               │
 │  Open VS Code                            │
+│  Open Cursor                             │
 │  Remove Worktree                         │
 │                                          │
 └──────────────────────────────────────────┘
 ```
+
+`Open Bash` suspends the UI and drops you into a shell inside the worktree
+directory, so you can run any command there (git, build tools, an AI coding
+assistant, ...). Type `exit` to return to the worktree UI.
 
 **Settings Modal** - Configure which IDEs to show:
 ```
@@ -65,6 +70,7 @@ A terminal UI application for managing multiple Git repositories using Git's nat
 
 - **Multi-repository management** - Scan and manage all repositories in a directory
 - **Worktree support** - Create and remove Git worktrees for parallel branch development
+- **Shell access** - Drop into a shell inside any worktree directory and come back
 - **Configurable IDE support** - Choose from Cursor, VS Code, Zed, Sublime Text, or Neovim
 - **Persistent settings** - IDE preferences saved to `~/.config/worktree/config.json`
 - **Interactive terminal UI** - Keyboard-driven navigation
@@ -161,7 +167,7 @@ On first run, a default config is created with Cursor and VS Code enabled.
 2. **Select a repository** - view its worktrees and actions in the right panel
 3. **Open Settings** - toggle which IDEs appear in the menu
 4. **Add New Worktree** - create a new branch with its own working directory
-5. **Select a worktree** - choose an IDE to open the code
+5. **Select a worktree** - open a shell in it, or choose an IDE to open the code
 
 ### Keyboard Navigation
 

@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -114,8 +115,23 @@ func OpenVSCode(openingDir string, logger func(format string, args ...interface{
 	}
 
 	logger("Opening vscode ...")
-	cmd := exec.Command("code", openingDir)
-	return cmd.Start()
+
+	return startDetached(exec.Command("code", openingDir))
+}
+
+// startDetached starts a GUI application without blocking the UI and reaps it
+// in the background. Without the Wait the finished process would stay around
+// as a zombie for the whole lifetime of the application, once per launch.
+func startDetached(cmd *exec.Cmd) error {
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	go func() {
+		_ = cmd.Wait()
+	}()
+
+	return nil
 }
 
 func GetWorktrees(logger func(format string, args ...interface{})) ([]string, error) {
@@ -270,6 +286,48 @@ func ChangeDirectory(path string) error {
 	return nil
 }
 
+// OpenShell starts an interactive shell inside the given directory and blocks
+// until it exits, so the user can run any command (git, build tools, an AI
+// assistant, ...) from the worktree they selected. The application has to be
+// suspended by the caller first, since the shell takes over the terminal.
+func OpenShell(path string, logger func(format string, args ...interface{})) error {
+	shell := shellCommand()
+
+	logger("Opening %v in %v ...", filepath.Base(shell), path)
+	fmt.Printf("\nStarting %s in %s\nType 'exit' to go back to worktree.\n\n", shell, path)
+
+	cmd := exec.Command(shell)
+	cmd.Dir = path
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// A non-zero status only reflects the last command the user ran in the
+	// shell, so it is not a failure of this action.
+	var exitErr *exec.ExitError
+	if err := cmd.Run(); err != nil && !errors.As(err, &exitErr) {
+		return fmt.Errorf("failed to run %v: %w", shell, err)
+	}
+
+	return nil
+}
+
+// shellCommand prefers bash and falls back to the user's login shell, then to
+// sh, so a shell is always available.
+func shellCommand() string {
+	candidates := []string{"bash", os.Getenv("SHELL"), "sh"}
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		if path, err := exec.LookPath(candidate); err == nil {
+			return path
+		}
+	}
+
+	return "sh"
+}
+
 func OpenCursor(path string, logger func(format string, args ...interface{})) error {
 	logger("Opening cursor ...")
 	workspaceFile := "workspace.code-workspace"
@@ -278,6 +336,5 @@ func OpenCursor(path string, logger func(format string, args ...interface{})) er
 		path = filepath.Join(path, workspaceFile)
 	}
 
-	cmd := exec.Command("cursor", path)
-	return cmd.Start()
+	return startDetached(exec.Command("cursor", path))
 }

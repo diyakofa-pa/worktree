@@ -178,6 +178,109 @@ If a `workspace.code-workspace` file exists in the main branch, it will be:
 - Automatically copied to new worktrees
 - Used when opening the worktree in VS Code or Cursor
 
+## CLI
+
+The same repositories can be driven from the command line, which is what makes
+the tool scriptable and usable by coding agents. Repositories under the entry
+point are addressed as **namespaces**, the way `kubectl` addresses namespaces
+and pods, and worktrees follow the `<type>/<name>` branch convention:
+
+```
+<entry-point>/<namespace>/<main|master>   the trunk worktree
+<entry-point>/<namespace>/<type>/<name>   a worktree, e.g. api/feature/login
+```
+
+Every worktree therefore has one handle: `<namespace>/<branch>`.
+
+```
+worktree get namespaces                 List the repositories under the entry point
+worktree get worktrees [namespace]      List worktrees, everywhere or in one namespace
+worktree get editors                    List the editors the open command can use
+worktree create <namespace>/<branch>    Create a worktree for a branch
+worktree remove <namespace>/<branch>    Remove a worktree and its branch
+worktree path <namespace>/<branch>      Print the directory of a worktree
+worktree open <namespace>/<branch>      Open a worktree in an editor
+worktree prune [namespace]              Report worktrees whose directory has disappeared
+worktree ui                             Open the interactive terminal UI
+```
+
+`namespaces` is aliased to `ns`, `worktrees` to `wt`, `create` to `add`, and
+`remove` to `rm` and `delete`. Running `worktree` with no command opens the UI,
+as before. Every worktree argument can be written either as
+`<namespace>/<branch>` or as `<branch>` with `--namespace`:
+
+```sh
+worktree create api/feature/login
+worktree create feature/login --namespace api
+worktree create login --namespace api --type feature
+```
+
+### Listing
+
+```sh
+$ worktree get namespaces
+NAMESPACE   BASE   WORKTREES   PATH
+api         main   3           /repos/api
+web         main   2           /repos/web
+
+$ worktree get worktrees --namespace api
+BRANCH          TYPE      STATUS         HEAD      PATH
+main            base      base           1b38464   /repos/api/main
+feature/login   feature   dirty          9c21ade   /repos/api/feature/login
+hotfix/crash    hotfix    clean,merged   1b38464   /repos/api/hotfix/crash
+```
+
+`STATUS` summarises what the worktree is: `base` for the trunk, `dirty` when it
+has uncommitted changes, `merged` once its branch is contained in the trunk,
+`missing` when its directory was deleted behind git's back, plus `locked` and
+`detached` where they apply. Filter with `--type feature`.
+
+### Creating and removing
+
+```sh
+worktree create api/feature/login                    # branch off the trunk
+worktree create api/feature/login --from origin/main # branch off any ref
+worktree remove api/feature/login                    # remove worktree and branch
+worktree remove api/feature/login --keep-branch      # remove the directory only
+```
+
+Creation checks out an existing local branch instead of recreating it, and
+copies `workspace.code-workspace` from the trunk when the repository has one
+(`--no-workspace` opts out).
+
+Removal is deliberately careful: a worktree with uncommitted changes, or whose
+branch is not merged into the trunk, is refused unless you pass `--force`, and
+nothing is deleted when it is refused. The trunk worktree is never removed.
+
+### Output formats
+
+Every listing command takes `-o table` (default), `-o json`, or `-o name`.
+Results go to stdout and progress messages to stderr, so output stays
+parseable:
+
+```sh
+cd "$(worktree path api/feature/login)"
+worktree get worktrees -o name           # api/main, api/feature/login, ...
+worktree get worktrees -o json | jq '.[] | select(.dirty)'
+```
+
+### Using it from an agent
+
+Every command is inline, exits non-zero on failure, and can emit JSON, so an
+agent can discover, create, work and clean up without shelling out to git:
+
+```sh
+worktree get namespaces -o json                            # what is available
+worktree create api/feature/login -o json | jq -r .path    # a worktree of its own
+worktree get worktrees -o json | jq '.[] | select(.merged and (.isBase | not))'
+worktree remove api/feature/login                          # once the branch landed
+worktree prune                                             # report stale records; --yes to drop
+```
+
+Each worktree in JSON carries `namespace`, `branch`, `type`, `name`, `path`,
+`head`, `isBase`, `detached`, `locked`, `prunable`, `missing`, `dirty`,
+`merged` and `status`.
+
 ## License
 
 This project is licensed under the MIT License.

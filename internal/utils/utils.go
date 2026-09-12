@@ -2,7 +2,6 @@ package utils
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -286,36 +285,65 @@ func ChangeDirectory(path string) error {
 	return nil
 }
 
-// OpenShell starts an interactive shell inside the given directory and blocks
-// until it exits, so the user can run any command (git, build tools, an AI
-// assistant, ...) from the worktree they selected. The application has to be
-// suspended by the caller first, since the shell takes over the terminal.
-func OpenShell(path string, logger func(format string, args ...interface{})) error {
-	shell := shellCommand()
-
-	logger("Opening %v in %v ...", filepath.Base(shell), path)
-	fmt.Printf("\nStarting %s in %s\nType 'exit' to go back to worktree.\n\n", shell, path)
-
-	cmd := exec.Command(shell)
-	cmd.Dir = path
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	// A non-zero status only reflects the last command the user ran in the
-	// shell, so it is not a failure of this action.
-	var exitErr *exec.ExitError
-	if err := cmd.Run(); err != nil && !errors.As(err, &exitErr) {
-		return fmt.Errorf("failed to run %v: %w", shell, err)
+// OpenShell hands the terminal to the user's own shell rooted at path, so
+// picking a worktree feels like a plain "cd" into it rather than nesting a
+// throwaway shell inside a suspended TUI. It reports whether a separate
+// terminal session was opened elsewhere (tmux, or a GUI terminal emulator
+// with tab-opening support), so the caller can close the app outright
+// instead of resuming it.
+//
+// Inside tmux, a new window is opened. Under a GUI terminal emulator that
+// exposes a way to script a new tab (Ghostty, iTerm2, Terminal.app), a new
+// tab is opened there instead. Both leave the app's own pane free to close,
+// since the worktree directory is already open elsewhere.
+//
+// Everywhere else, the worktree app's own process image is replaced by the
+// shell (see execShell): the app closes and the same terminal tab becomes an
+// interactive shell already sitting in the worktree directory, with nothing
+// left to "exit" back out of.
+func OpenShell(path string, logger func(format string, args ...interface{})) (bool, error) {
+	if inTmux() {
+		logger("Opening a new tmux window in %v ...", path)
+		if err := startDetached(exec.Command("tmux", "new-window", "-c", path)); err != nil {
+			return false, err
+		}
+		return true, nil
 	}
 
-	return nil
+	if openTerminalTab(path, logger) {
+		return true, nil
+	}
+
+	shell := shellCommand()
+	logger("Opening %v in %v ...", filepath.Base(shell), path)
+
+	if err := os.Chdir(path); err != nil {
+		return false, fmt.Errorf("failed to change directory to %v: %w", path, err)
+	}
+
+	// On success this replaces the current process and never returns.
+	if err := execShell(shell, os.Environ()); err != nil {
+		return false, fmt.Errorf("failed to run %v: %w", shell, err)
+	}
+
+	return false, nil
 }
 
-// shellCommand prefers bash and falls back to the user's login shell, then to
-// sh, so a shell is always available.
+func inTmux() bool {
+	return os.Getenv("TMUX") != ""
+}
+
+// shellCommand prefers the user's own login shell, so the session keeps their
+// aliases, prompt, and history instead of dropping them into a bare bash.
+// It falls back to bash, then sh, so a shell is always available.
+//
+// Every candidate is resolved through exec.LookPath before use: execShell's
+// unix implementation execve(2)s the result directly, which (unlike a shell)
+// never searches PATH for a bare name, so returning one unresolved could run
+// whatever file happens to have that name in the worktree's own directory
+// instead of a real shell.
 func shellCommand() string {
-	candidates := []string{"bash", os.Getenv("SHELL"), "sh"}
+	candidates := []string{os.Getenv("SHELL"), "bash", "sh"}
 	for _, candidate := range candidates {
 		if candidate == "" {
 			continue
@@ -325,7 +353,12 @@ func shellCommand() string {
 		}
 	}
 
-	return "sh"
+	// Every real candidate above failed to resolve, which should only happen
+	// on a system with no shell installed at all. "/bin/sh" is a path, not a
+	// bare name, so execve(2) treats it literally instead of searching PATH
+	// or falling back to the current directory; it will simply fail to start
+	// (a clean, fail-closed error) rather than resolve to something else.
+	return "/bin/sh"
 }
 
 func OpenCursor(path string, logger func(format string, args ...interface{})) error {

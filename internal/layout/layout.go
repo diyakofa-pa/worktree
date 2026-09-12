@@ -255,16 +255,28 @@ func (l *Layout) selectedWorktreeActionList(path string, selectedWorktree string
 	}).SetSelectedBackgroundColor(secondaryColor)
 
 	l.ActionList.AddItem("Open Bash", "", 0, func() {
-		// The shell needs the terminal, so the UI is suspended while it runs
-		// and restored once the shell exits. Suspend reports false when it
-		// could not hand the terminal over, in which case the shell never ran.
+		// The shell needs the terminal, so the UI is suspended first. When
+		// OpenShell opens a session elsewhere (a tmux window, a new terminal
+		// tab), it returns normally and the app is stopped outright rather
+		// than resumed, since the worktree directory is already open in that
+		// other session. Otherwise OpenShell replaces this process outright
+		// and Suspend never gets a callback return to resume from anyway.
+		// Suspend reports false when it could not hand the terminal over, in
+		// which case the shell never ran.
+		var openedElsewhere bool
 		suspended := l.App.Suspend(func() {
-			if err := utils.OpenShell(worktreeDir, l.Log); err != nil {
+			opened, err := utils.OpenShell(worktreeDir, l.Log)
+			if err != nil {
 				l.Log("Failed to open bash: %v", err)
 			}
+			openedElsewhere = opened
 		})
 		if !suspended {
 			l.Log("Failed to suspend the UI, bash was not started")
+			return
+		}
+		if openedElsewhere {
+			l.App.Stop()
 		}
 	}).SetSelectedBackgroundColor(secondaryColor)
 
